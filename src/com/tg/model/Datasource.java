@@ -83,11 +83,19 @@ public class Datasource {
             COLUMN_SONG_ALBUM + ", " + COLUMN_SONG_TRACK + " FROM " + TABLE_ARTIST_SONG_VIEW +
             " WHERE " + COLUMN_SONG_TITLE + " = \"";
 
+    // using placeholder ? to prevent injection attack
+    public static final String QUERY_VIEW_SONG_INFO_PREP = "SELECT " + COLUMN_ARTIST_NAME + ", " +
+            COLUMN_SONG_ALBUM + ", " + COLUMN_SONG_TRACK + " FROM " + TABLE_ARTIST_SONG_VIEW +
+            " WHERE " + COLUMN_SONG_TITLE + " = ?";
+
     private Connection conn;
+
+    private PreparedStatement querySongInfoView;
 
     public boolean open() {
         try {
             conn = DriverManager.getConnection(CONNECTION_STRING);
+            querySongInfoView = conn.prepareStatement(QUERY_VIEW_SONG_INFO_PREP);
             return true;
         } catch (SQLException e) {
             System.out.println("Couldn't connect to database: " + e.getMessage());
@@ -97,6 +105,9 @@ public class Datasource {
 
     public void close() {
         try {
+            if (querySongInfoView != null) {
+                querySongInfoView.close();
+            }
             if (conn != null) {
                 conn.close();
             }
@@ -130,7 +141,9 @@ public class Datasource {
                 artist.setName(results.getString(INDEX_ARTIST_NAME));
                 artists.add(artist);
             }
+
             return artists;
+
         } catch (SQLException e) {
             System.out.println("Query failed: " + e.getMessage());
             return null;
@@ -138,19 +151,20 @@ public class Datasource {
     }
 
     public List<String> queryAlbumsForArtist(String artistName, int sortOrder) {
+
         StringBuilder sb = new StringBuilder(QUERY_ALBUMS_BY_ARTIST_START);
         sb.append(artistName);
         sb.append("\"");
 
         if (sortOrder != ORDER_BY_NONE) {
             sb.append(QUERY_ALBUMS_BY_ARTIST_SORT);
-
             if (sortOrder == ORDER_BY_DESC) {
                 sb.append("DESC");
             } else {
                 sb.append("ASC");
             }
         }
+
         System.out.println("SQL statement = " + sb.toString());
 
         try (Statement statement = conn.createStatement();
@@ -182,6 +196,7 @@ public class Datasource {
                 sb.append("ASC");
             }
         }
+
         System.out.println("SQL Statement: " + sb.toString());
 
         try (Statement statement = conn.createStatement();
@@ -195,7 +210,6 @@ public class Datasource {
                 songArtist.setAlbumName(results.getString(2));
                 songArtist.setTrack(results.getInt(3));
                 songArtists.add(songArtist);
-
             }
 
             return songArtists;
@@ -213,9 +227,9 @@ public class Datasource {
 
             ResultSetMetaData meta = results.getMetaData();
             int numColumns = meta.getColumnCount();
-
             for (int i = 1; i <= numColumns; i++) {
-                System.out.format("Column %d in the songs table is names %s\n", i, meta.getColumnName(i));
+                System.out.format("Column %d in the songs table is names %s\n",
+                        i, meta.getColumnName(i));
             }
         } catch (SQLException e) {
             System.out.println("Query failed: " + e.getMessage());
@@ -250,15 +264,14 @@ public class Datasource {
         }
     }
 
+//    before(with StringBuilder): SELECT name, album, track FROM artist_list WHERE title = "Go Your Own Way" or 1=1 or ""
+//                           now: SELECT name, album, track FROM artist_list WHERE title = "Go Your Own Way or 1=1 or ""
+
     public List<SongArtist> querySongInfoView(String title) {
-        StringBuilder sb = new StringBuilder(QUERY_VIEW_SONG_INFO);
-        sb.append(title);
-        sb.append("\"");
 
-        System.out.println(sb.toString());
-
-        try (Statement statement = conn.createStatement();
-             ResultSet results = statement.executeQuery(sb.toString())) {
+        try {
+            querySongInfoView.setString(1, title);
+            ResultSet results = querySongInfoView.executeQuery();
 
             List<SongArtist> songArtists = new ArrayList<>();
             while (results.next()) {
@@ -268,6 +281,7 @@ public class Datasource {
                 songArtist.setTrack(results.getInt(3));
                 songArtists.add(songArtist);
             }
+
             return songArtists;
 
         } catch (SQLException e) {
@@ -276,3 +290,5 @@ public class Datasource {
         }
     }
 }
+
+
